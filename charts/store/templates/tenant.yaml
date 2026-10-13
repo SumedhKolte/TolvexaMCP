@@ -1,0 +1,30 @@
+{{- if .Values.tenant.enabled }}
+{{- $ctx := dict "root" . "component" "tenant" -}}
+# Provisioned stores (bonus) each get their own namespace. These caps keep one store
+# from starving the others or the platform (docs/design.md D10.x). Sized from this
+# chart's own requests/limits, plus headroom for the store-init Job and a rolling update.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: store-quota
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+spec:
+  hard:
+    {{- range $k, $v := .Values.tenant.quota }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: store-limits
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      max: {{- toYaml .Values.tenant.limitRange.max | nindent 8 }}
+      defaultRequest: {{- toYaml .Values.tenant.limitRange.defaultRequest | nindent 8 }}
+      default: {{- toYaml .Values.tenant.limitRange.default | nindent 8 }}
+{{- end }}

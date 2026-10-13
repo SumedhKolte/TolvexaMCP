@@ -1,0 +1,90 @@
+# Local environment: Kind on macOS (Colima).
+#
+# One file per environment, passed with -f to EVERY release (platform, store, woo-mcp,
+# mcp-notes, mcp-slow). Layout convention (see docs/design.md, Decisions):
+#   global:        environment-wide settings every chart reads
+#   <component>:   settings for one component; charts ignore keys that aren't theirs
+# Component sections are added in the phase that builds each component.
+
+global:
+  # Hostnames must match WP_HOME/WP_SITEURL and the cookie domain, or redirects break.
+  hubHost: hub.localtest.me
+  storeHost: store.localtest.me
+  ingressClassName: nginx
+  ingressNamespace: ingress-nginx   # NetworkPolicies admit ingress traffic only from here
+  tls:
+    enabled: false          # plain http locally; documented in docs/threat-model.md
+    clusterIssuer: ""
+  # "" = omit storageClassName so the cluster default (Kind: "standard") is used.
+  # Note: an explicit "" in a PVC would DISABLE dynamic provisioning, so charts omit it.
+  storageClass: ""
+  image:
+    registry: team-mcp       # images built by scripts/load-images.sh
+    tag: local
+    pullPolicy: IfNotPresent
+  # Multi-store provisioning (bonus): stores created on the Stores page, one namespace
+  # each, served at <slug><hostSuffix> (e.g. store-alpha.localtest.me).
+  stores:
+    enabled: true
+    hostSuffix: .localtest.me
+    maxPerUser: 2
+    maxTotal: 3                 # the 8 GB Colima VM fits about three extra stores
+    provisionTimeoutMinutes: 15
+    resyncMinutes: 2              # ready stores pick up chart/values changes within this
+
+# ---------- store (charts/store) ----------
+store:
+  environmentType: local
+mariadb:
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+wordpress:
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+# ---------- woo-mcp (charts/woo-mcp) ----------
+wooMcp:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# ---------- platform (charts/platform -> gateway, postgres, dashboard) ----------
+gateway:
+  replicaCount: 1
+  config:
+    logLevel: info
+    # Chat agent provider (see charts/gateway/values.yaml for Gemini/Ollama presets).
+    llmBaseUrl: https://api.groq.com/openai/v1
+    llmModel: openai/gpt-oss-120b
+    llmReasoningEffort: low
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 384Mi }
+postgres:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 384Mi }
+dashboard:
+  enabled: true
+
+# ---------- upstreams (charts/upstream-mcp, one release per instance) ----------
+upstreams:
+  namespaceOwner: mcp-notes
+  instances:
+    notes:
+      image: mcp-notes
+      port: 8080
+      secretName: mcp-notes-secrets
+      env:
+        NOTES_FILE: /data/notes.json
+    slow:
+      image: mcp-slow
+      port: 8080
+      secretName: mcp-slow-secrets
+      env:
+        ALLOW_CRASH: "true"          # demo: slow__crash (admin-only at the gateway)
+        STARTUP_DELAY_MS: "20000"    # slow boot so a restart is visible as "unreachable"
+        ECHO_DELAY_MS: "15000"       # > the gateway's 10 s tool timeout

@@ -1,0 +1,24 @@
+# Single-node Kind cluster for local development.
+#
+# - Ports 80/443 on the node are mapped to 127.0.0.1 on the host (via Colima's port
+#   forwarding), so *.localtest.me (which resolves to 127.0.0.1) reaches ingress-nginx.
+# - The node is labelled ingress-ready=true; scripts/up-local.sh pins the ingress-nginx
+#   controller to it and enables hostPort.
+# - The default CNI (kindnet) is kept: since kind v0.24 it enforces NetworkPolicy,
+#   which up-local.sh verifies on every cluster creation (see docs/design.md, Decisions).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: team-mcp
+nodes:
+  - role: control-plane
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        listenAddress: "127.0.0.1"
+        protocol: TCP

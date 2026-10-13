@@ -1,0 +1,111 @@
+# Defaults for the store chart (WordPress + WooCommerce + MariaDB + init Job).
+# Environment overrides come from values/values-{local,prod}.yaml (`global:` and the
+# `store`/`mariadb`/`wordpress`/`storeInit` sections). See docs/design.md D0.4.
+
+global:
+  storeHost: store.localtest.me
+  ingressClassName: nginx
+  # Namespace of the ingress controller; NetworkPolicy only admits traffic from it.
+  ingressNamespace: ingress-nginx
+  tls:
+    enabled: false
+    clusterIssuer: ""
+  storageClass: ""
+
+store:
+  title: Team MCP Store
+  currency: USD
+  # WooCommerce "country:state" code.
+  country: "US:CA"
+  address: "1 Demo Street"
+  city: San Francisco
+  postcode: "94103"
+  # "local" or "production"; sets WP_ENVIRONMENT_TYPE.
+  environmentType: local
+  # Secret names. create-secrets.sh creates them; nothing in this chart holds a value.
+  secrets:
+    mariadb: mariadb-secrets
+    wordpress: wordpress-secrets
+    wooMcp: woo-mcp-secrets
+  sampleProduct:
+    name: Team MCP Mug
+    slug: team-mcp-mug
+    regularPrice: "12.00"
+    description: A sturdy mug for the team. Seeded by store-init so the storefront isn't empty.
+
+mariadb:
+  image:
+    repository: mariadb
+    tag: "11.8.9"            # 11.8 LTS line
+    pullPolicy: IfNotPresent
+  database: wordpress
+  user: wordpress
+  persistence:
+    size: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 768Mi }
+
+wordpress:
+  image:
+    repository: wordpress
+    tag: 7.1.3-php8.5-apache
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 5Gi              # wp-content: plugins, themes, uploads
+  php:
+    memoryLimit: 256M      # WooCommerce recommends >= 256M; image default is 128M
+    uploadMaxSize: 32M
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 768Mi }
+  # Run WP-Cron from a CronJob instead of on page loads (needed with TLS: see wp-cron.yaml).
+  systemCron:
+    enabled: false
+    schedule: "*/5 * * * *"
+    timeoutSeconds: 240
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+      limits: { cpu: 500m, memory: 128Mi }
+
+storeInit:
+  image:
+    repository: wordpress
+    tag: cli-2.12.0-php8.5
+    pullPolicy: IfNotPresent
+  # Pinned so re-runs are reproducible; bumping it upgrades WooCommerce on the next
+  # `helm upgrade` (the Job reinstalls the pinned version and runs DB migrations).
+  woocommerceVersion: "11.2.1"
+  backoffLimit: 2
+  activeDeadlineSeconds: 900
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 768Mi }
+  # The Job must reach the Kubernetes API to patch woo-mcp-secrets. NetworkPolicy sees the
+  # API server's real endpoint (after Service DNAT), which listens on 6443 on Kind and k3s.
+  apiServerPorts: [6443]
+
+networkPolicy:
+  enabled: true
+  # CIDRs treated as "internal" and excluded from the store-init Job's internet egress
+  # (RFC 1918). The Job may reach the internet on 80/443 only to download WooCommerce.
+  privateCIDRs: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+
+# Multi-store (bonus): set by the provisioner for stores it creates, one per namespace.
+# The main store (release "store" in namespace "store") leaves this off.
+tenant:
+  enabled: false
+  quota:
+    requests.cpu: "1"
+    requests.memory: 2Gi
+    limits.cpu: "6"
+    limits.memory: 4Gi
+    pods: "10"
+    persistentvolumeclaims: "3"
+    requests.storage: 20Gi
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+  limitRange:
+    max: { cpu: "2", memory: 2Gi }
+    defaultRequest: { cpu: 50m, memory: 64Mi }
+    default: { cpu: 500m, memory: 256Mi }

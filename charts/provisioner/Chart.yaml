@@ -1,0 +1,6 @@
+apiVersion: v2
+name: provisioner
+description: Store provisioner (bonus) - installs one WooCommerce store per namespace for the gateway
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

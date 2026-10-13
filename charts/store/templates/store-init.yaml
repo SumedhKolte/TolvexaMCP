@@ -1,0 +1,148 @@
+{{- $ctx := dict "root" . "component" "store-init" -}}
+# store-init: idempotent WooCommerce setup Job (Helm post-install/post-upgrade hook),
+# plus its script and the least-privilege identity it runs as.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: store-init-scripts
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+data:
+  store-init.sh: |
+    {{- .Files.Get "files/store-init.sh" | nindent 4 }}
+  ensure-api-key.php: |
+    {{- .Files.Get "files/ensure-api-key.php" | nindent 4 }}
+  ensure-admin.php: |
+    {{- .Files.Get "files/ensure-admin.php" | nindent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: store-init
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+---
+# The only API permission in the store namespace: patch ONE named Secret. No get, list,
+# or create. "create" can't be scoped by resourceNames in RBAC, so it would mean "create
+# any Secret". create-secrets.sh creates the Secret beforehand instead. The Job gets the
+# current values through its env (secretKeyRef), read by the kubelet, not the Job's token.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: store-init
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ .Values.store.secrets.wooMcp | quote }}]
+    verbs: ["patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: store-init
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: store-init
+subjects:
+  - kind: ServiceAccount
+    name: store-init
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: store-init
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+  annotations:
+    # Runs after every install and upgrade, once the chart's resources exist. The
+    # previous Job is deleted only when the next one is created, so its logs stay
+    # readable (kubectl -n store logs job/store-init).
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.storeInit.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.storeInit.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" $ctx | nindent 8 }}
+    spec:
+      serviceAccountName: store-init
+      restartPolicy: Never
+      securityContext:
+        # uid 33 = www-data in the WordPress image. The wp-cli image's own www-data is
+        # 82; files created in wp-content (plugins, uploads/wc-logs) must belong to the
+        # uid the web pod runs as.
+        {{- include "store.podSecurityContext" (dict "uid" 33) | nindent 8 }}
+      initContainers:
+        # wp-cli needs WordPress core files. Copy them from the SAME image the web pod
+        # runs, so the version always matches and nothing is downloaded.
+        {{- include "store.copyCoreInitContainer" (dict "root" . "seedContent" false "resources" .Values.storeInit.resources) | nindent 8 }}
+      containers:
+        - name: store-init
+          image: "{{ .Values.storeInit.image.repository }}:{{ .Values.storeInit.image.tag }}"
+          imagePullPolicy: {{ .Values.storeInit.image.pullPolicy }}
+          command: ["bash", "/opt/store-init/store-init.sh"]
+          workingDir: /var/www/html
+          env:
+            {{- include "store.wordpressEnv" . | nindent 12 }}
+            - name: WORDPRESS_CONFIG_EXTRA
+              value: |
+                {{- include "store.wpConfigExtra" (dict "root" . "webPod" false) | nindent 16 }}
+            - { name: HOME, value: /tmp }
+            - { name: WP_CLI_CACHE_DIR, value: /tmp/wp-cli-cache }
+            - { name: WP_CLI_PHP_ARGS, value: "-d memory_limit=512M" }
+            - { name: STORE_URL, value: {{ include "store.url" . | quote }} }
+            - { name: STORE_TITLE, value: {{ .Values.store.title | quote }} }
+            - { name: STORE_CURRENCY, value: {{ .Values.store.currency | quote }} }
+            - { name: STORE_COUNTRY, value: {{ .Values.store.country | quote }} }
+            - { name: STORE_ADDRESS, value: {{ .Values.store.address | quote }} }
+            - { name: STORE_CITY, value: {{ .Values.store.city | quote }} }
+            - { name: STORE_POSTCODE, value: {{ .Values.store.postcode | quote }} }
+            - { name: WC_VERSION, value: {{ .Values.storeInit.woocommerceVersion | quote }} }
+            - { name: WORDPRESS_SERVICE_URL, value: "http://wordpress.{{ .Release.Namespace }}.svc.cluster.local" }
+            - { name: WOO_MCP_SECRET, value: {{ .Values.store.secrets.wooMcp | quote }} }
+            - { name: SAMPLE_NAME, value: {{ .Values.store.sampleProduct.name | quote }} }
+            - { name: SAMPLE_SLUG, value: {{ .Values.store.sampleProduct.slug | quote }} }
+            - { name: SAMPLE_PRICE, value: {{ .Values.store.sampleProduct.regularPrice | quote }} }
+            - { name: SAMPLE_DESCRIPTION, value: {{ .Values.store.sampleProduct.description | quote }} }
+            {{- range $k := list "WP_ADMIN_USER" "WP_ADMIN_PASSWORD" "WP_ADMIN_EMAIL" }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef: { name: {{ $.Values.store.secrets.wordpress }}, key: {{ $k }} }
+            {{- end }}
+            # Current key pair, if any; optional because it doesn't exist on first install.
+            {{- range $k := list "WC_CONSUMER_KEY" "WC_CONSUMER_SECRET" }}
+            - name: {{ $k }}
+              valueFrom:
+                secretKeyRef: { name: {{ $.Values.store.secrets.wooMcp }}, key: {{ $k }}, optional: true }
+            {{- end }}
+          resources:
+            {{- toYaml .Values.storeInit.resources | nindent 12 }}
+          securityContext:
+            {{- include "store.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: html, mountPath: /var/www/html }
+            - { name: content, mountPath: /var/www/html/wp-content }
+            - { name: scripts, mountPath: /opt/store-init, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: html
+          emptyDir: {}
+        # Same RWO volume the web pod uses, so the installed plugin is what it serves.
+        # RWO is per node: fine on single-node Kind/k3s; see docs/design.md for multi-node.
+        - name: content
+          persistentVolumeClaim:
+            claimName: wordpress-content
+        - name: scripts
+          configMap:
+            name: store-init-scripts
+        - name: tmp
+          emptyDir: {}

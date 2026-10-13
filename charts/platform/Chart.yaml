@@ -1,0 +1,19 @@
+apiVersion: v2
+name: platform
+description: Umbrella chart for the platform namespace (gateway, dashboard, postgres, ingress rules, network policies)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: gateway
+    version: 0.1.0
+    repository: file://../gateway
+    condition: gateway.enabled
+  - name: postgres
+    version: 0.1.0
+    repository: file://../postgres
+    condition: postgres.enabled
+  - name: dashboard
+    version: 0.1.0
+    repository: file://../dashboard
+    condition: dashboard.enabled

@@ -1,0 +1,182 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $np := .Values.networkPolicy -}}
+# Deny-by-default for the platform namespace, then one explicit allow per flow.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# ingress-nginx -> gateway (/api, /mcp, /healthz)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: gateway }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.ingressNamespace }} }
+      ports:
+        - { protocol: TCP, port: {{ .Values.gateway.port }} }
+{{- with $np.metricsScrapeNamespaces }}
+---
+# Prometheus (in the listed namespaces) -> gateway /metrics port. Not the API port, and
+# not ingress-nginx: /metrics is never reachable from outside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-metrics
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: gateway }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range . }}
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ . }} }
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: {{ $.Values.gateway.metricsPort }} }
+{{- end }}
+---
+# gateway -> postgres, woo-mcp, the upstreams namespace, and (chat) the LLM provider.
+# Nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-egress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: gateway }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: postgres }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ $np.storeNamespace }} }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: woo-mcp }
+      ports:
+        - { protocol: TCP, port: {{ $np.wooMcpPort }} }
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ $np.upstreamsNamespace }} }
+      ports:
+        {{- range $np.upstreamPorts }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+    {{- if .Values.global.stores.enabled }}
+    # Multi-store (bonus): the provisioner API, and woo-mcp in every provisioned store
+    # namespace (labelled team-mcp/tenant=true by the provisioner; only it can create them).
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.stores.provisionerNamespace | default "provisioner" }} }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: provisioner }
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        - namespaceSelector:
+            matchLabels: { team-mcp/tenant: "true" }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: woo-mcp }
+      ports:
+        - { protocol: TCP, port: {{ $np.wooMcpPort }} }
+    {{- end }}
+    {{- with $np.llmEgress }}
+    {{- if .enabled }}
+    - to:
+        - ipBlock:
+            cidr: {{ .cidr }}
+            {{- with .except }}
+            except:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+      ports:
+        {{- range .ports }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+    {{- end }}
+    {{- end }}
+---
+# postgres accepts only the gateway; no egress besides DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: gateway }
+      ports:
+        - { protocol: TCP, port: 5432 }
+{{- if .Values.dashboard.enabled }}
+---
+# ingress-nginx -> dashboard
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dashboard-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: dashboard }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.ingressNamespace }} }
+      ports:
+        - { protocol: TCP, port: {{ .Values.dashboard.port }} }
+{{- end }}
+{{- if .Values.global.tls.enabled }}
+---
+# cert-manager HTTP-01: ingress-nginx -> the temporary ACME solver pod cert-manager starts
+# here while issuing the hub certificate (default-deny would block the challenge).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acme-http01-solver
+spec:
+  podSelector:
+    matchLabels: { acme.cert-manager.io/http01-solver: "true" }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.ingressNamespace }} }
+      ports:
+        - { protocol: TCP, port: 8089 }
+{{- end }}
+{{- end }}

@@ -1,0 +1,39 @@
+# Generic chart for a simple upstream MCP server (Streamable HTTP + bearer auth + /healthz).
+# Installed once per server; each release selects its entry with `--set instance=<name>`:
+#   helm upgrade --install mcp-notes charts/upstream-mcp -n upstreams -f values/values-local.yaml --set instance=notes
+#   helm upgrade --install mcp-slow  charts/upstream-mcp -n upstreams -f values/values-local.yaml --set instance=slow
+# Instances differ only in image, port, Secret name, and (small) env settings.
+
+global:
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []        # e.g. [registry-pull] for a private registry
+
+instance: ""
+
+upstreams:
+  # The one release that also owns the namespace-wide default-deny + DNS policies
+  # (two releases can't both own an object with the same name).
+  namespaceOwner: mcp-notes
+  # The only allowed caller.
+  allowFrom:
+    namespace: platform
+    podLabels:
+      app.kubernetes.io/name: gateway
+  defaults:
+    replicaCount: 1
+    port: 8080
+    image: ""        # image name under global.image.registry (required per instance)
+    tag: ""          # empty: global.image.tag
+    imageId: ""      # set by scripts/up-local.sh so a rebuilt :local image rolls the pods
+    secretName: ""   # Secret with MCP_BEARER_TOKEN (created by scripts/create-secrets.sh)
+    env: {}
+    resources:
+      requests: { cpu: 10m, memory: 48Mi }
+      limits: { cpu: 250m, memory: 128Mi }
+  instances: {}
+
+# Seconds a terminating pod keeps serving before shutdown starts (zero-downtime rollouts).
+preStopSleepSeconds: 5

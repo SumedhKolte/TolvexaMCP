@@ -1,0 +1,105 @@
+{{- $ctx := dict "root" . "component" "mariadb" -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mariadb-data
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+  annotations:
+    # Never delete the database on `helm uninstall`; delete the PVC deliberately.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- include "store.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.mariadb.persistence.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mariadb
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  # RWO volume: the old pod must release it before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "store.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "store.labels" $ctx | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "store.podSecurityContext" (dict "uid" 999) | nindent 8 }}
+      containers:
+        - name: mariadb
+          image: "{{ .Values.mariadb.image.repository }}:{{ .Values.mariadb.image.tag }}"
+          imagePullPolicy: {{ .Values.mariadb.image.pullPolicy }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MARIADB_DATABASE
+              value: {{ .Values.mariadb.database | quote }}
+            - name: MARIADB_USER
+              value: {{ .Values.mariadb.user | quote }}
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.store.secrets.mariadb }}, key: MARIADB_PASSWORD }
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.store.secrets.mariadb }}, key: MARIADB_ROOT_PASSWORD }
+          # mariadb-admin is MariaDB 11's name for mysqladmin (the old name is no longer
+          # shipped). `ping` exits 0 whenever the server answers, even "access denied", so
+          # no credentials are needed. TCP (-h 127.0.0.1) rather than the socket, so the
+          # init-time temporary server (started with --skip-networking) doesn't count as ready.
+          readinessProbe:
+            exec:
+              command: ["mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            {{- toYaml .Values.mariadb.resources | nindent 12 }}
+          securityContext:
+            {{- include "store.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/mysql }
+            - { name: run, mountPath: /run/mysqld }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mariadb-data
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "store.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql

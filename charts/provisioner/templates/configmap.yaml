@@ -1,0 +1,16 @@
+{{- if .Values.global.stores.enabled }}
+# Environment values for every store the provisioner installs: the same keys the main
+# store gets from values-<env>.yaml, so tenant stores match their environment (hosts,
+# TLS, storage class, images, sizes). Each store then overrides global.storeHost.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provisioner-tenant-values
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+data:
+  tenant-values.yaml: |
+    {{- $tenant := dict "global" (omit .Values.global "stores" "hubHost") "store" .Values.store "mariadb" .Values.mariadb "wordpress" .Values.wordpress "storeInit" .Values.storeInit "wooMcp" .Values.wooMcp }}
+    {{- with .Values.tenant }}{{ $_ := set $tenant "tenant" . }}{{ end }}
+    {{- toYaml $tenant | nindent 4 }}
+{{- end }}

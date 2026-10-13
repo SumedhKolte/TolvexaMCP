@@ -1,0 +1,65 @@
+{{- $c := include "upstream.cfg" . | fromYaml -}}
+{{- $from := .Values.upstreams.allowFrom -}}
+# This server's pods: reachable ONLY from the gateway; no egress except DNS. So upstreams
+# can't reach platform, store, the internet, or each other.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "upstream.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ $from.namespace }} }
+          podSelector:
+            matchLabels:
+              {{- toYaml $from.podLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ $c.port }} }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+{{- if eq .Release.Name .Values.upstreams.namespaceOwner }}
+---
+# Namespace-wide baseline (owned by one release): anything else in this namespace is denied.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+{{- end }}

@@ -1,0 +1,83 @@
+{{- if .Values.global.stores.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provisioner
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  # Exactly one: it tracks running Helm jobs in memory (state itself lives in the cluster).
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "provisioner.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "provisioner.labels" . | nindent 8 }}
+      annotations:
+        checksum/tenant-values: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum | trunc 16 }}
+        {{- with .Values.provisioner.imageId }}
+        team-mcp/image-id: {{ . | quote }}
+        {{- end }}
+    spec:
+      serviceAccountName: provisioner
+      # The only workload with an API token: it's how it talks to Kubernetes (rbac.yaml).
+      automountServiceAccountToken: true
+      {{- with .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: provisioner
+          image: "{{ .Values.global.image.registry }}/{{ .Values.provisioner.image.name }}:{{ .Values.provisioner.image.tag | default .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.provisioner.port }}
+          env:
+            - { name: PORT, value: {{ .Values.provisioner.port | quote }} }
+            - { name: TENANT_CLUSTER_ROLE, value: team-mcp-store-tenant }
+            - { name: SERVICE_ACCOUNT, value: provisioner }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - { name: HELM_TIMEOUT, value: {{ .Values.provisioner.helmTimeout | quote }} }
+            - { name: MAX_ATTEMPTS, value: {{ .Values.provisioner.maxAttempts | quote }} }
+            - { name: NODE_EXTRA_CA_CERTS, value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.provisioner.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: tenant-values, mountPath: /config, readOnly: true }
+            - { name: secrets, mountPath: /var/run/secrets/provisioner, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+        - name: tenant-values
+          configMap: { name: provisioner-tenant-values }
+        - name: secrets
+          secret: { secretName: {{ .Values.provisioner.secretName }} }
+{{- end }}

@@ -1,0 +1,84 @@
+{{- $sel := dict "app.kubernetes.io/name" "dashboard" "app.kubernetes.io/instance" .Release.Name -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  labels:
+    {{- toYaml $sel | nindent 4 }}
+    app.kubernetes.io/part-of: team-mcp
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- toYaml $sel | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml $sel | nindent 8 }}
+        app.kubernetes.io/part-of: team-mcp
+      {{- with .Values.imageId }}
+      annotations:
+        team-mcp/image-id: {{ . | quote }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.global.image.pullSecrets }}
+      # Private registry: pull with these Secrets (created by create-secrets.sh from .env).
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nginx
+          image: "{{ .Values.global.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag | default .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port }}
+          readinessProbe:
+            httpGet: { path: /nginx-health, port: http }
+            periodSeconds: 10
+          # Keep serving for a few seconds after termination starts, until the Ingress and
+          # Service have stopped routing here; only then does SIGTERM start the graceful
+          # exit. Without it, a rolling update drops the odd in-flight request (Phase 8).
+          lifecycle:
+            preStop:
+              exec:
+                command: [sleep, "{{ .Values.preStopSleepSeconds }}"]
+          livenessProbe:
+            httpGet: { path: /nginx-health, port: http }
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dashboard
+  labels:
+    {{- toYaml $sel | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- toYaml $sel | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.port }}
+      targetPort: http

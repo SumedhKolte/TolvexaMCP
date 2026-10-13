@@ -1,0 +1,48 @@
+# Store provisioner (bonus: multi-store). Installed into its own namespace ("provisioner",
+# created with Pod Security "restricted" by scripts/create-secrets.sh). Environment
+# overrides come from values/values-{local,prod}.yaml like every other release.
+
+global:
+  storeHost: store.localtest.me
+  ingressClassName: nginx
+  ingressNamespace: ingress-nginx
+  tls:
+    enabled: false
+    clusterIssuer: ""
+  storageClass: ""
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  stores:
+    enabled: false
+
+provisioner:
+  image:
+    name: provisioner
+    tag: ""           # empty: global.image.tag
+  imageId: ""         # set by up-local.sh so a rebuilt :local image rolls the pod
+  port: 8080
+  secretName: provisioner-secrets   # PROVISIONER_TOKEN (create-secrets.sh)
+  helmTimeout: 12m
+  maxAttempts: 3
+  # The API server's real endpoint port after Service DNAT (Kind and k3s: 6443).
+  apiServerPorts: [6443]
+  # Only the gateway may call the provisioner.
+  allowFrom:
+    namespace: platform
+    podLabels:
+      app.kubernetes.io/name: gateway
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+
+# Passed through to every store the provisioner installs (same keys as the store and
+# woo-mcp charts read). The env values file fills these in.
+store: {}
+mariadb: {}
+wordpress: {}
+storeInit: {}
+wooMcp: {}
+tenant: {}

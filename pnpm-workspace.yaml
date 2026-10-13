@@ -1,0 +1,18 @@
+packages:
+  - gateway
+  - dashboard
+  - mcp-woo
+  - mcp-notes
+  - mcp-slow
+  - provisioner
+
+# pnpm only runs dependency install scripts that are explicitly allowed here.
+allowBuilds:
+  # esbuild's postinstall verifies its native binary (used by tsx and vitest).
+  esbuild: true
+  # argon2 ships prebuilt binaries (incl. linux-arm64/x64 musl for the Alpine images);
+  # its install script would only compile from source, so it stays disabled.
+  argon2: false
+
+# pnpm's minimumReleaseAge guard (refuses very fresh releases) stays on with no
+# exclusions: when a fresh version is pulled in, pin an older one instead.

@@ -1,0 +1,8 @@
+# Keep secrets and local build state out of every image build context.
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+.git
+*.log

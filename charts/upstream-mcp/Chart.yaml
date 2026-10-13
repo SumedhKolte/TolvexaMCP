@@ -1,0 +1,6 @@
+apiVersion: v2
+name: upstream-mcp
+description: Generic chart for a simple upstream MCP server (used for mcp-notes and mcp-slow)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

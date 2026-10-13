@@ -1,0 +1,67 @@
+# Defaults for the gateway chart (normally installed through the platform umbrella, which
+# passes the `gateway:` section of values/values-{local,prod}.yaml).
+
+global:
+  hubHost: hub.localtest.me
+  tls:
+    enabled: false
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []        # e.g. [registry-pull] for a private registry
+  # Multi-store provisioning (bonus); see charts/provisioner. Off unless enabled.
+  stores:
+    enabled: false
+
+replicaCount: 1
+image:
+  name: gateway
+  tag: ""            # empty: use global.image.tag
+# Set by scripts/up-local.sh to the local image's ID so a rebuilt :local image rolls the pods.
+imageId: ""
+
+port: 8080
+# Prometheus /metrics listener (stand-out B). A separate port: the Service exposes it as
+# "metrics" for in-cluster scrapers, the Ingress never routes to it, and the platform
+# NetworkPolicy only lets networkPolicy.metricsScrapeNamespaces reach it.
+metricsPort: 9090
+# prometheus.io/* annotations on the pod and Service, for annotation-based scrape configs
+# (kubernetes-pods / kubernetes-service-endpoints jobs). Prometheus is not required.
+metricsAnnotations: true
+# Secret created by scripts/create-secrets.sh: DATABASE_URL, SESSION_SECRET,
+# CREDENTIAL_ENC_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, LLM_API_KEY, WOO_MCP_BEARER_TOKEN.
+secretName: gateway-secrets
+
+# Non-secret settings (see gateway/src/config/index.ts for every option and default).
+config:
+  logLevel: info
+  wooMcpUrl: http://woo-mcp.store.svc.cluster.local:8080/mcp
+  # Proxies in front of the gateway: ingress-nginx = 1 (used to read the client IP).
+  trustProxyHops: 1
+  healthIntervalMs: 30000
+  defaultToolTimeoutMs: 10000
+  defaultMemberToolAccess: allow
+  upstreamHostAllowlist: ""
+  allowPublicUpstreams: false
+  # Chat agent: any OpenAI-compatible endpoint. The key (if needed) is LLM_API_KEY in the
+  # gateway Secret. Presets (also set networkPolicy.llmEgress in the platform chart):
+  #   Groq:   https://api.groq.com/openai/v1                           (default)
+  #   Gemini: https://generativelanguage.googleapis.com/v1beta/openai/
+  #   Ollama: http://<host-or-service>:11434/v1                        (no key)
+  llmBaseUrl: https://api.groq.com/openai/v1
+  llmModel: openai/gpt-oss-120b
+  llmTimeoutMs: 60000
+  # reasoning_effort for reasoning models ("" = not sent). "low" keeps gpt-oss fast and
+  # within free-tier token-per-minute limits.
+  llmReasoningEffort: ""
+  chatMaxIterations: 8
+  # Mask customer names/emails/phones/street addresses before they reach the LLM provider.
+  chatPiiMasking: true
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { cpu: "1", memory: 512Mi }
+
+# Seconds a terminating pod keeps serving before shutdown starts (zero-downtime rollouts).
+preStopSleepSeconds: 5

@@ -1,0 +1,16 @@
+{{- if .Values.global.stores.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: provisioner
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "provisioner.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.provisioner.port }}
+      targetPort: http
+{{- end }}

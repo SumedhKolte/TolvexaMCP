@@ -1,0 +1,38 @@
+# Defaults for the woo-mcp chart. Environment overrides: values/values-{local,prod}.yaml
+# (`global:` and the `wooMcp:` section). See docs/design.md D0.4.
+
+global:
+  storeHost: store.localtest.me
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []        # e.g. [registry-pull] for a private registry
+
+wooMcp:
+  replicaCount: 1
+  image:
+    name: mcp-woo
+    tag: ""                   # empty: use global.image.tag
+  # Set by scripts/up-local.sh to the local image's ID so a rebuild triggers a rollout.
+  imageId: ""
+  port: 8080
+  # Secret created by create-secrets.sh (bearer token) and patched by the store-init Job
+  # (WooCommerce key pair). Mounted as files and re-read per request.
+  secretName: woo-mcp-secrets
+  # WordPress Service in this namespace (installed by the store chart).
+  wordpressService: wordpress
+  timeoutMs: 8000
+  # The only client allowed to reach woo-mcp (NetworkPolicy): the gateway pods.
+  allowFrom:
+    namespace: platform
+    podLabels:
+      app.kubernetes.io/name: gateway
+  networkPolicy:
+    enabled: true
+  resources:
+    requests: { cpu: 25m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# Seconds a terminating pod keeps serving before shutdown starts (zero-downtime rollouts).
+preStopSleepSeconds: 5

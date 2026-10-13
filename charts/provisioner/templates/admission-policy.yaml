@@ -1,0 +1,48 @@
+{{- if .Values.global.stores.enabled }}
+# Hard fence for the provisioner's ServiceAccount, enforced by the API server itself
+# (ValidatingAdmissionPolicy, GA since Kubernetes 1.30; no webhook to run). Whatever its
+# RBAC allows, every create/update/delete it makes must target a namespace named
+# store-*, or an object inside one, and the namespaces it creates must be labelled as
+# provisioned stores.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: team-mcp-provisioner-scope
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: ["*"]
+  matchConditions:
+    - name: is-the-provisioner
+      expression: "request.userInfo.username == '{{ include "provisioner.username" . }}'"
+  variables:
+    - name: target
+      expression: >-
+        request.resource.resource == 'namespaces'
+          ? (object != null ? object.metadata.name : oldObject.metadata.name)
+          : request.namespace
+  validations:
+    - expression: "variables.target.startsWith('store-')"
+      messageExpression: "'the store provisioner may only change namespaces named store-* (got: ' + variables.target + ')'"
+    - expression: >-
+        request.resource.resource != 'namespaces' || request.operation != 'CREATE' ||
+        (has(object.metadata.labels) && 'team-mcp/tenant' in object.metadata.labels &&
+         object.metadata.labels['team-mcp/tenant'] == 'true')
+      message: "namespaces created by the store provisioner must be labelled team-mcp/tenant=true"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: team-mcp-provisioner-scope
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+spec:
+  policyName: team-mcp-provisioner-scope
+  validationActions: [Deny]
+{{- end }}

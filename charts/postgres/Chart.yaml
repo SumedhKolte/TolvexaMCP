@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres
+description: Gateway database (official postgres image, non-root, single instance with a PVC)
+type: application
+version: 0.1.0
+appVersion: "16.15"

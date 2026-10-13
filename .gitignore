@@ -1,0 +1,31 @@
+# Secrets — never commit. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+*.pem
+*.key
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Helm packaging artifacts
+charts/*/charts/*.tgz
+charts/*/Chart.lock
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Playwright MCP artifacts (page snapshots can capture form values)
+.playwright-mcp/
+
+# Database and wp-content backups (scripts/backup.sh)
+backups/

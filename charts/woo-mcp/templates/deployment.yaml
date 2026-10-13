@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: woo-mcp
+  labels:
+    {{- include "wooMcp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.wooMcp.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "wooMcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "wooMcp.labels" . | nindent 8 }}
+      {{- with .Values.wooMcp.imageId }}
+      annotations:
+        # Local dev only: the tag is always "local", so the image ID is what changes when
+        # the image is rebuilt. Changing it rolls the pods (prod uses versioned tags).
+        team-mcp/image-id: {{ . | quote }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.global.image.pullSecrets }}
+      # Private registry: pull with these Secrets (created by create-secrets.sh from .env).
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: woo-mcp
+          image: {{ include "wooMcp.image" . | quote }}
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.wooMcp.port }}
+          env:
+            - { name: PORT, value: {{ .Values.wooMcp.port | quote }} }
+            # Requests go to WordPress's in-cluster Service (plain HTTP inside the cluster).
+            - name: WC_BASE_URL
+              value: "http://{{ .Values.wooMcp.wordpressService }}.{{ .Release.Namespace }}.svc.cluster.local"
+            # WooCommerce verifies OAuth signatures against its HOME URL with the scheme
+            # forced to http for non-TLS requests, so this is always http://<storeHost>,
+            # even in production where the public site is https (docs/design.md D2.3).
+            - name: WC_SIGNATURE_BASE_URL
+              value: "http://{{ .Values.global.storeHost }}"
+            - { name: WC_TIMEOUT_MS, value: {{ .Values.wooMcp.timeoutMs | quote }} }
+            - { name: SECRETS_DIR, value: /var/run/secrets/woo-mcp }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+          # Keep serving for a few seconds after termination starts, until the Ingress and
+          # Service have stopped routing here; only then does SIGTERM start the graceful
+          # exit. Without it, a rolling update drops the odd in-flight request (Phase 8).
+          lifecycle:
+            preStop:
+              exec:
+                command: [sleep, "{{ .Values.preStopSleepSeconds }}"]
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.wooMcp.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Whole-directory mount (no subPath): the kubelet refreshes it when the Secret
+            # changes, e.g. after store-init rotates the WooCommerce key.
+            - { name: secrets, mountPath: /var/run/secrets/woo-mcp, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ .Values.wooMcp.secretName }}
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,95 @@
+# Production-like environment: single VPS running k3s.
+#
+# Same charts as local; only these values differ. Replace every placeholder
+# (team.example.com, ghcr.io/your-org, the issuer name) before deploying.
+# See docs/upgrade-rollback.md for the full local-vs-prod comparison.
+
+global:
+  hubHost: hub.team.example.com
+  storeHost: store.team.example.com
+  ingressClassName: nginx
+  ingressNamespace: ingress-nginx
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod   # a cert-manager ClusterIssuer you create once
+  storageClass: local-path            # k3s default provisioner
+  image:
+    registry: ghcr.io/your-org/team-mcp
+    tag: "0.1.0"                      # pin a real version; never "latest"
+    pullPolicy: Always
+    # Private registry (ghcr.io packages are private by default): set REGISTRY_* in .env
+    # (create-secrets.sh makes "registry-pull") and uncomment. Public images need nothing.
+    pullSecrets: []
+    # pullSecrets: [registry-pull]
+  # Multi-store provisioning (bonus). Off by default in production: it gives the
+  # provisioner cluster rights (fenced to store-* namespaces) and each store needs about
+  # 0.8 CPU / 1.5 GiB requested. To enable: a wildcard DNS record *.<hostSuffix> pointing
+  # at the VPS, then enabled: true.
+  stores:
+    enabled: false
+    hostSuffix: .team.example.com
+    maxPerUser: 1
+    maxTotal: 2
+    provisionTimeoutMinutes: 15
+    resyncMinutes: 10              # ready stores pick up chart/values changes within this
+
+# ---------- store (charts/store) ----------
+store:
+  environmentType: production
+mariadb:
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 1Gi }
+wordpress:
+  # TLS on: WP-Cron can't loop back to https://<storeHost> from inside the pod, so a
+  # CronJob runs it every 5 minutes through the in-cluster Service (design D8.2).
+  systemCron:
+    enabled: true
+  resources:
+    requests: { cpu: 250m, memory: 384Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+# ---------- woo-mcp (charts/woo-mcp) ----------
+wooMcp:
+  replicaCount: 1
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 384Mi }
+
+# ---------- platform (charts/platform -> gateway, postgres, dashboard) ----------
+gateway:
+  replicaCount: 2
+  config:
+    logLevel: info
+    # Chat agent provider (see charts/gateway/values.yaml for Gemini/Ollama presets).
+    llmBaseUrl: https://api.groq.com/openai/v1
+    llmModel: openai/gpt-oss-120b
+    llmReasoningEffort: low
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: "2", memory: 768Mi }
+postgres:
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: "2", memory: 1Gi }
+dashboard:
+  enabled: true
+
+# ---------- upstreams (charts/upstream-mcp, one release per instance) ----------
+upstreams:
+  namespaceOwner: mcp-notes
+  instances:
+    notes:
+      image: mcp-notes
+      port: 8080
+      secretName: mcp-notes-secrets
+      env:
+        NOTES_FILE: /data/notes.json
+    slow:
+      image: mcp-slow
+      port: 8080
+      secretName: mcp-slow-secrets
+      env:
+        ALLOW_CRASH: "false"         # no crash button in production
+        STARTUP_DELAY_MS: "0"
+        ECHO_DELAY_MS: "15000"

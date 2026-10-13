@@ -1,0 +1,64 @@
+{{- if .Values.wooMcp.networkPolicy.enabled }}
+# Adds woo-mcp's flows on top of the store chart's namespace-wide default-deny + DNS.
+# woo-mcp is reachable ONLY from the gateway pods; nothing in `upstreams`, nothing else in
+# `platform`, and nothing else in `store` can connect to it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: woo-mcp-ingress
+  labels:
+    {{- include "wooMcp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wooMcp.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # One element with both selectors = AND: gateway pods in the platform namespace.
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.wooMcp.allowFrom.namespace }} }
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.wooMcp.allowFrom.podLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.wooMcp.port }} }
+---
+# woo-mcp -> wordpress:80 only (plus DNS from the store chart). No internet, no MariaDB.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: woo-mcp-egress
+  labels:
+    {{- include "wooMcp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wooMcp.selectorLabels" . | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: {{ .Values.wooMcp.wordpressService }} }
+      ports:
+        - { protocol: TCP, port: 80 }
+---
+# The matching ingress side on WordPress: accept woo-mcp on :80.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wordpress-from-woo-mcp
+  labels:
+    {{- include "wooMcp.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: {{ .Values.wooMcp.wordpressService }} }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "wooMcp.selectorLabels" . | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 80 }
+{{- end }}

@@ -1,0 +1,20 @@
+# Static dashboard (nginx-unprivileged). Normally installed through the platform umbrella.
+global:
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []        # e.g. [registry-pull] for a private registry
+
+replicaCount: 1
+image:
+  name: dashboard
+  tag: ""
+imageId: ""     # set by scripts/up-local.sh so a rebuilt :local image rolls the pods
+port: 8080
+resources:
+  requests: { cpu: 10m, memory: 16Mi }
+  limits: { cpu: 200m, memory: 64Mi }
+
+# Seconds a terminating pod keeps serving before shutdown starts (zero-downtime rollouts).
+preStopSleepSeconds: 5

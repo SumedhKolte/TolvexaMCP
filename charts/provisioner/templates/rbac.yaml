@@ -1,0 +1,81 @@
+{{- if .Values.global.stores.enabled }}
+# Least privilege for a component that must create namespaces (docs/design.md D10.2):
+#  1. team-mcp-provisioner (cluster-wide): only namespaces, and binding ONE role.
+#  2. team-mcp-store-tenant: what Helm needs inside a store namespace. Never bound
+#     cluster-wide; the provisioner binds it to itself in each store-* namespace it creates.
+#  3. The ValidatingAdmissionPolicy (admission-policy.yaml) refuses any change by this
+#     ServiceAccount outside namespaces named store-*, so rights 1 and 2 can't be pointed
+#     at platform, store, kube-system or anything else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provisioner
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: team-mcp-provisioner
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, create, delete]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    verbs: [create]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [bind]
+    resourceNames: [team-mcp-store-tenant]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: team-mcp-provisioner
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: team-mcp-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: provisioner
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: team-mcp-store-tenant
+  labels:
+    {{- include "provisioner.labels" . | nindent 4 }}
+rules:
+  # What the store and woo-mcp charts create (Helm also keeps its release state in Secrets).
+  - apiGroups: [""]
+    resources: [secrets, configmaps, services, persistentvolumeclaims, serviceaccounts, resourcequotas, limitranges]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # The store-init Job's Role (patch one Secret). Kubernetes only lets us create it
+  # because we hold that permission ourselves here: no escalation possible.
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # helm --wait reads rollout progress.
+  - apiGroups: [""]
+    resources: [pods, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+{{- end }}

@@ -1,0 +1,93 @@
+{{- $c := include "upstream.cfg" . | fromYaml -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+spec:
+  replicas: {{ $c.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "upstream.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "upstream.labels" . | nindent 8 }}
+      {{- with $c.imageId }}
+      annotations:
+        team-mcp/image-id: {{ . | quote }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.global.image.pullSecrets }}
+      # Private registry: pull with these Secrets (created by create-secrets.sh from .env).
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: "{{ .Values.global.image.registry }}/{{ required "image is required" $c.image }}:{{ $c.tag | default .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $c.port }}
+          env:
+            - { name: PORT, value: {{ $c.port | quote }} }
+            - { name: SECRETS_DIR, value: /var/run/secrets/mcp }
+            {{- range $k, $v := $c.env }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          # startupProbe covers a slow boot (mcp-slow's STARTUP_DELAY_MS) without making
+          # the liveness probe lenient: up to 90 s to start, then normal checks.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 45
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 2
+          # Keep serving for a few seconds after termination starts, until the Ingress and
+          # Service have stopped routing here; only then does SIGTERM start the graceful
+          # exit. Without it, a rolling update drops the odd in-flight request (Phase 8).
+          lifecycle:
+            preStop:
+              exec:
+                command: [sleep, "{{ .Values.preStopSleepSeconds }}"]
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml $c.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Whole-directory mount so a rotated token is picked up without a restart.
+            - { name: secrets, mountPath: /var/run/secrets/mcp, readOnly: true }
+            - { name: data, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ required "secretName is required" $c.secretName }}
+            defaultMode: 0440
+        # Scratch space (mcp-notes keeps its JSON file here); lost when the pod is deleted.
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

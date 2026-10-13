@@ -1,0 +1,49 @@
+# Defaults for the platform umbrella. Subchart settings live under their chart name
+# (gateway:, postgres:, dashboard:); `global:` is shared with every subchart.
+
+global:
+  hubHost: hub.localtest.me
+  ingressClassName: nginx
+  ingressNamespace: ingress-nginx
+  tls:
+    enabled: false
+    clusterIssuer: ""
+  storageClass: ""
+  image:
+    registry: team-mcp
+    tag: local
+    pullPolicy: IfNotPresent
+    pullSecrets: []        # e.g. [registry-pull] for a private registry
+  # Multi-store provisioning (bonus); see charts/provisioner. Off unless enabled.
+  stores:
+    enabled: false
+
+gateway:
+  enabled: true
+  port: 8080
+  metricsPort: 9090
+postgres:
+  enabled: true
+dashboard:
+  enabled: true
+  port: 8080
+
+networkPolicy:
+  enabled: true
+  # Where the gateway's upstreams live, and the ports it may call there.
+  storeNamespace: store
+  wooMcpPort: 8080
+  upstreamsNamespace: upstreams
+  upstreamPorts: [8080]
+  # Namespaces whose pods may scrape the gateway's /metrics port (e.g. where Prometheus
+  # runs). Nothing else can reach it; kubectl port-forward still works for local viewing.
+  metricsScrapeNamespaces: [monitoring]
+  # Chat agent -> LLM provider. Hosted providers (Groq, Gemini) need HTTPS to public
+  # addresses; NetworkPolicy can't filter by hostname, so this allows 443 to the public
+  # internet while keeping every private range blocked. For Ollama on a known host, set
+  # cidr to that host's /32, except to [] and ports to [11434].
+  llmEgress:
+    enabled: true
+    cidr: 0.0.0.0/0
+    except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16]
+    ports: [443]

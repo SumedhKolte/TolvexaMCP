@@ -1,0 +1,165 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ns := .Release.Namespace -}}
+{{- $inst := .Release.Name -}}
+# Deny-by-default for the whole store namespace, then one explicit allow per flow.
+# woo-mcp's own flows (gateway -> woo-mcp, woo-mcp -> wordpress) live in the woo-mcp chart.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# ingress-nginx -> wordpress:80 (storefront and wp-admin), and store-init -> wordpress:80
+# (its readiness wait).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wordpress-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: wordpress, app.kubernetes.io/instance: {{ $inst }} }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.ingressNamespace }} }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: store-init, app.kubernetes.io/instance: {{ $inst }} }
+{{- if .Values.wordpress.systemCron.enabled }}
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: wp-cron, app.kubernetes.io/instance: {{ $inst }} }
+{{- end }}
+      ports:
+        - { protocol: TCP, port: 80 }
+---
+# wordpress -> mariadb:3306
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wordpress-egress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: wordpress, app.kubernetes.io/instance: {{ $inst }} }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: mariadb, app.kubernetes.io/instance: {{ $inst }} }
+      ports:
+        - { protocol: TCP, port: 3306 }
+---
+# mariadb accepts only wordpress and store-init. No egress besides DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mariadb-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: mariadb, app.kubernetes.io/instance: {{ $inst }} }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: wordpress, app.kubernetes.io/instance: {{ $inst }} }
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: store-init, app.kubernetes.io/instance: {{ $inst }} }
+      ports:
+        - { protocol: TCP, port: 3306 }
+---
+# store-init egress: mariadb, wordpress, the Kubernetes API (to patch one Secret), and the
+# public internet on 80/443 only (downloads.wordpress.org for the WooCommerce plugin).
+# Private ranges are excluded from the internet rule so the Job can't reach other
+# in-cluster services through it. This is the namespace's only internet egress and is
+# documented in docs/threat-model.md.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: store-init-egress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: store-init, app.kubernetes.io/instance: {{ $inst }} }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: mariadb, app.kubernetes.io/instance: {{ $inst }} }
+      ports:
+        - { protocol: TCP, port: 3306 }
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: wordpress, app.kubernetes.io/instance: {{ $inst }} }
+      ports:
+        - { protocol: TCP, port: 80 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        {{- range .Values.storeInit.apiServerPorts }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.networkPolicy.privateCIDRs | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+{{- if .Values.wordpress.systemCron.enabled }}
+---
+# wp-cron CronJob -> wordpress:80 only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wp-cron-egress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: wp-cron, app.kubernetes.io/instance: {{ $inst }} }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: wordpress, app.kubernetes.io/instance: {{ $inst }} }
+      ports:
+        - { protocol: TCP, port: 80 }
+{{- end }}
+{{- if .Values.global.tls.enabled }}
+---
+# cert-manager HTTP-01: ingress-nginx -> the temporary ACME solver pod that cert-manager
+# starts in this namespace while issuing the store certificate. Without it, default-deny
+# blocks the challenge and Let's Encrypt never issues the certificate.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acme-http01-solver
+spec:
+  podSelector:
+    matchLabels: { acme.cert-manager.io/http01-solver: "true" }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.global.ingressNamespace }} }
+      ports:
+        - { protocol: TCP, port: 8089 }
+{{- end }}
+{{- end }}

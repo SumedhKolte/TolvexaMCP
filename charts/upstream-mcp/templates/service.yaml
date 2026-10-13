@@ -1,0 +1,15 @@
+{{- $c := include "upstream.cfg" . | fromYaml -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "upstream.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $c.port }}
+      targetPort: http

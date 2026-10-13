@@ -1,0 +1,55 @@
+{{- if .Values.global.stores.enabled }}
+# Deny-by-default for the provisioner namespace: the gateway may call it, and it may
+# call the Kubernetes API. Nothing else in or out (Helm charts are inside the image).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: provisioner
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "provisioner.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.provisioner.allowFrom.namespace }} }
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.provisioner.allowFrom.podLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.provisioner.port }} }
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        {{- range .Values.provisioner.apiServerPorts }}
+        - { protocol: TCP, port: {{ . }} }
+        {{- end }}
+{{- end }}

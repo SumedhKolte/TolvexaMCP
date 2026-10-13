@@ -1,0 +1,60 @@
+{{- if .Values.wordpress.systemCron.enabled }}
+{{- $ctx := dict "root" . "component" "wp-cron" -}}
+# System cron for WordPress (docs/design.md D8.2). With TLS on, WP-Cron's own loopback
+# request (https://<storeHost>) can't work from inside the pod, so page-load cron is
+# disabled (DISABLE_WP_CRON) and this CronJob calls wp-cron.php over the in-cluster
+# Service instead. That runs due events, including WooCommerce's Action Scheduler queue.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: wp-cron
+  labels:
+    {{- include "store.labels" $ctx | nindent 4 }}
+spec:
+  schedule: {{ .Values.wordpress.systemCron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 120
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.wordpress.systemCron.timeoutSeconds }}
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "store.labels" $ctx | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            {{- include "store.podSecurityContext" (dict "uid" 33) | nindent 12 }}
+          containers:
+            - name: wp-cron
+              # The WordPress image only for its PHP CLI: no new image to trust or pull.
+              image: "{{ .Values.wordpress.image.repository }}:{{ .Values.wordpress.image.tag }}"
+              imagePullPolicy: {{ .Values.wordpress.image.pullPolicy }}
+              command: [php, -r]
+              args:
+                - |
+                  $ctx = stream_context_create(['http' => [
+                    'header' => "Host: " . getenv('STORE_HOST') . "\r\nX-Forwarded-Proto: " . getenv('STORE_SCHEME') . "\r\n",
+                    'timeout' => (float) getenv('TIMEOUT'), 'ignore_errors' => true, 'follow_location' => 0,
+                  ]]);
+                  // No ?doing_wp_cron=: WordPress only honours that value when it matches the
+                  // lock it set itself (its own spawn protocol); without it, it takes the lock.
+                  @file_get_contents(getenv('CRON_URL'), false, $ctx);
+                  $status = $http_response_header[0] ?? 'no response';
+                  fwrite(STDOUT, "wp-cron.php: $status\n");
+                  exit(preg_match('#^HTTP/\S+ 200#', $status) ? 0 : 1);
+              env:
+                - { name: CRON_URL, value: "http://wordpress.{{ .Release.Namespace }}.svc.cluster.local/wp-cron.php" }
+                - { name: STORE_HOST, value: {{ .Values.global.storeHost | quote }} }
+                - { name: STORE_SCHEME, value: {{ ternary "https" "http" .Values.global.tls.enabled | quote }} }
+                - { name: TIMEOUT, value: {{ sub .Values.wordpress.systemCron.timeoutSeconds 10 | quote }} }
+              securityContext:
+                {{- include "store.containerSecurityContext" . | nindent 16 }}
+              resources:
+                {{- toYaml .Values.wordpress.systemCron.resources | nindent 16 }}
+{{- end }}
