@@ -451,6 +451,8 @@ It runs Helm lint and template for both values files, plus the production policy
 - [upgrade-rollback.md](docs/upgrade-rollback.md): local vs production, upgrade,
   rollback, restore, pinned versions.
 - [demo-script.md](docs/demo-script.md): the live demo, step by step.
+- [demo-video-script.md](docs/demo-video-script.md): a tight ~9-minute script for the
+  required demo video.
 - [demo-database.md](docs/demo-database.md): how to show the databases, volumes and the
   persistence proof (`scripts/show-db.sh`).
 - [privacy-notice.md](docs/privacy-notice.md): privacy policy draft for the AI assistant.
