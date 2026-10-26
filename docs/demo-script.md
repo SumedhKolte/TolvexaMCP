@@ -130,6 +130,13 @@ Then sign in as B (private window) → Audit Log: **only B's own calls**.
   (FORBIDDEN, SERVER_UNREACHABLE…), and `mcp_gateway_upstream_up`. "This port isn't
   routed by the Ingress, and only the monitoring namespace may scrape it."
 
+## 7. Persistence and the databases (optional, 3 minutes)  ·  assignment: persistent storage
+
+Run `bash scripts/show-db.sh` for a guided tour, then `bash scripts/show-db.sh persist`:
+it deletes the Postgres, MariaDB and notes pods and shows identical data afterwards.
+Talking points, what not to show on screen, and a graphical-client option are in
+[demo-database.md](demo-database.md).
+
 ## If something goes wrong on stage
 
 | Problem | Recovery |

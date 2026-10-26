@@ -538,3 +538,28 @@ gateway exited and Kubernetes restarted it. Fixed with a handler that logs one l
   diverge. After the reset they match again.
 
 Final: gateway tests 138, `e2e-dod.sh` 62/62, UI test users unaffected (login 200).
+
+## 2026-10-26 — mcp-notes volume, dashboard refresh, database tour
+
+**mcp-notes persistence (D8.9):** the generic upstream chart's per-instance `persistence`
+block, on for notes (1 Gi PVC, kept on uninstall, `Recreate`, one replica).
+Verified: a note written, the pod deleted, `notes__search_notes` found it on the new pod.
+
+**Dashboard (D11.1):** the Overview landing page; grouped navigation; a branded sign-in
+page; light / dark / system theme built on semantic tokens (27 hard-coded colours
+replaced); the theme is applied before paint by an external script, so the CSP is
+unchanged. Verified with 30 headless-browser checks, run twice: against `vite preview`
+and against the live cluster with the CSP enforced. They cover routing, the nav per role,
+the theme switch and its persistence, and no horizontal scroll at 390 px on 8 pages.
+
+**Database tour:** `scripts/show-db.sh` (gateway, store, volumes, persist) and
+`docs/demo-database.md`.
+- It shows secrets only as hash or ciphertext prefixes.
+- `persist` deletes the Postgres, MariaDB and notes pods, waits until the old pods are
+  gone, prints old → new pod names, and compares counts.
+- First version bug: it could have compared against still-terminating pods; fixed, and
+  the pods are now proven to be different.
+- Found while writing it: WooCommerce keeps orders in its HPOS tables
+  (`wp_wc_orders`), not `wp_posts`.
+
+Final: `e2e-dod.sh` 62/62, gateway tests 138, dashboard tests 15, `helm-check.sh` passes.

@@ -440,7 +440,7 @@ It runs Helm lint and template for both values files, plus the production policy
 | `provisioner/` | Store provisioner (bonus): one WooCommerce store per namespace, with Helm |
 | `charts/` | Helm charts: `platform` (umbrella: gateway, dashboard, postgres), `store`, `woo-mcp`, generic `upstream-mcp`, `provisioner` |
 | `values/` | `values-local.yaml`, `values-prod.yaml`: the only per-environment differences |
-| `scripts/` | `up-local.sh`, `teardown-local.sh`, `create-secrets.sh`, `register-upstreams.sh`, `load-images.sh`, `helm-check.sh` + `policy-check.mjs`, `e2e-dod.sh`, `e2e-stores.sh`, `deploy-prod.sh`, `build-push.sh`, `backup.sh` |
+| `scripts/` | `show-db.sh` (database tour and persistence proof), `up-local.sh`, `teardown-local.sh`, `create-secrets.sh`, `register-upstreams.sh`, `load-images.sh`, `helm-check.sh` + `policy-check.mjs`, `e2e-dod.sh`, `e2e-stores.sh`, `deploy-prod.sh`, `build-push.sh`, `backup.sh` |
 | `docs/` | see below |
 
 **Docs:**
@@ -451,6 +451,8 @@ It runs Helm lint and template for both values files, plus the production policy
 - [upgrade-rollback.md](docs/upgrade-rollback.md): local vs production, upgrade,
   rollback, restore, pinned versions.
 - [demo-script.md](docs/demo-script.md): the live demo, step by step.
+- [demo-database.md](docs/demo-database.md): how to show the databases, volumes and the
+  persistence proof (`scripts/show-db.sh`).
 - [privacy-notice.md](docs/privacy-notice.md): privacy policy draft for the AI assistant.
 - [NOTES.md](NOTES.md): build log with verification results per phase.
 
