@@ -26,7 +26,10 @@ async function main() {
   }
 
   const encKey = parseEncryptionKey(config.CREDENTIAL_ENC_KEY);
-  const pool = createPool(config.DATABASE_URL);
+  const pool = createPool(config.DATABASE_URL, (err) => {
+    // One JSON line, no connection string (it contains the password).
+    process.stderr.write(`${JSON.stringify({ level: 40, time: Date.now(), msg: "database connection error (idle client dropped)", error: err.message })}\n`);
+  });
   const db = createDb(pool);
   const ssrf = { allowlist: config.UPSTREAM_HOST_ALLOWLIST, allowPublic: config.ALLOW_PUBLIC_UPSTREAMS };
 

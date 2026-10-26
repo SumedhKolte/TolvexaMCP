@@ -49,7 +49,8 @@ describe("display helpers", () => {
   });
   it("converts datetime-local input to ISO with offset", () => {
     expect(localInputToIso("")).toBeUndefined();
-    expect(localInputToIso("2026-10-11T09:30")).toMatch(/^2026-10-1\dT\d\d:30:00\.000Z$/);
+    expect(localInputToIso("2026-10-11T09:30")).toMatch(/^2026-10-1\dT\d\d:\d\d:00\.000Z$/);
+    expect(new Date(localInputToIso("2026-10-11T09:30")!).getTime()).toBe(new Date("2026-10-11T09:30").getTime());
   });
 });
 

@@ -506,3 +506,35 @@ failure is intermittent; it couldn't be reproduced in 5 tries afterwards.
 
 The real clean slate was then run: the cluster was deleted ("Kind cluster 'team-mcp'
 deleted.") and rebuilt from scratch.
+
+## 2026-10-26 — Persistence audit; gateway crash on Postgres restart
+
+**Audit against the Urumi assignment PDF:** all mandatory requirements are met in the repo.
+Not done: the demo video and the GitHub repo/submission (user's). Stand-outs not
+attempted: OAuth, many-tools handling, hosted MCP servers, per-key tool-call rate limits.
+
+**Persistence test:** the postgres, mariadb and wordpress pods were killed and restarted:
+- MariaDB: 1 product and 376 options before and after;
+- plugins unchanged;
+- Postgres: 3 users, 3 upstreams, 6 permission rules, 0 audit rows after.
+
+**Bug found:** `createPool` had no `pool.on("error")` listener. A Postgres restart makes
+node-postgres emit "error" on the pool; with no listener that kills the process. The
+gateway exited and Kubernetes restarted it. Fixed with a handler that logs one line.
+- `gateway/test/pool.test.ts` fails without the fix and passes with it.
+- Verified live: Postgres killed and restarted, gateway 0 restarts, `/readyz` back at
+  200, 2 handled log lines.
+
+**Incident:**
+- `.env` was edited at 17:38 (not by me): `ADMIN_PASSWORD` became 9 characters, and the
+  Secret was updated to match.
+- The gateway validates at least 12 characters at every start, so after the restart it
+  crash-looped.
+- The rule was not weakened. A fresh 24-character password was generated into `.env`
+  (the user's choice), the Secret was redeployed, and the stored admin hash was reset to
+  match (argon2id, hashed inside the gateway, password via stdin). Login checked: 200.
+- **Why the reset was needed:** `ADMIN_PASSWORD` only seeds the first admin, so changing
+  `.env` never changes an existing login. `.env` and the stored login can silently
+  diverge. After the reset they match again.
+
+Final: gateway tests 138, `e2e-dod.sh` 62/62, UI test users unaffected (login 200).
