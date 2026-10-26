@@ -32,6 +32,22 @@ export function ConnectPage() {
   const tools = useQuery({ queryKey: ["tools"], queryFn: () => api<{ tools: Tool[] }>("/api/tools").then((r) => r.tools) });
 
   const cursor = JSON.stringify({ mcpServers: { "team-gateway": { url: mcpUrl, headers: { Authorization: `Bearer ${KEY_PLACEHOLDER}` } } } }, null, 2);
+  const claudeDesktop = JSON.stringify(
+    {
+      mcpServers: {
+        "team-gateway": {
+          command: "node",
+          args: [
+            "<PATH_TO_REPO>/scripts/claude-desktop-bridge.mjs",
+            mcpUrl,
+            KEY_PLACEHOLDER,
+          ],
+        },
+      },
+    },
+    null,
+    2
+  );
   const claudeCode = `claude mcp add --transport http team-gateway ${mcpUrl} \\\n  --header "Authorization: Bearer ${KEY_PLACEHOLDER}"`;
   const inspector = `npx @modelcontextprotocol/inspector`;
   const curl = `curl -s ${mcpUrl} \\\n  -H "Authorization: Bearer ${KEY_PLACEHOLDER}" \\\n  -H "Content-Type: application/json" \\\n  -H "Accept: application/json, text/event-stream" \\\n  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'`;
@@ -74,6 +90,7 @@ export function ConnectPage() {
           <Tabs defaultValue="cursor">
             <TabsList>
               <TabsTrigger value="cursor">Cursor</TabsTrigger>
+              <TabsTrigger value="claude-desktop">Claude Desktop</TabsTrigger>
               <TabsTrigger value="claude">Claude Code</TabsTrigger>
               <TabsTrigger value="inspector">MCP Inspector</TabsTrigger>
               <TabsTrigger value="curl">curl</TabsTrigger>
@@ -83,6 +100,21 @@ export function ConnectPage() {
                 Add this to <code>~/.cursor/mcp.json</code> (or <code>.cursor/mcp.json</code> in a project), then enable <b>team-gateway</b> under Settings → MCP.
               </p>
               <Snippet code={cursor} />
+            </TabsContent>
+            <TabsContent value="claude-desktop" className="space-y-3 text-sm">
+              <p>
+                The Claude Mac/Windows desktop app communicates via <code>stdio</code> subprocesses. Use the included bridge script at <code>scripts/claude-desktop-bridge.mjs</code> to connect:
+              </p>
+              <ol className="list-decimal space-y-1 pl-5">
+                <li>
+                  Open Claude Desktop → <b>Settings</b> (<code>Cmd + ,</code>) → <b>Developer</b> → <b>Edit Config</b> (or edit <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>).
+                </li>
+                <li>Add this snippet to <code>mcpServers</code>:</li>
+              </ol>
+              <Snippet code={claudeDesktop} />
+              <p className="text-xs text-muted-foreground">
+                Replace <code>&lt;PATH_TO_REPO&gt;</code> with your absolute repository path (or download the script via <code>curl -s {origin}/claude-bridge.mjs -o ~/claude-bridge.mjs</code>). Completely quit and restart Claude Desktop (<code>Cmd + Q</code>) after saving.
+              </p>
             </TabsContent>
             <TabsContent value="claude" className="space-y-3 text-sm">
               <p>Run once in a terminal; then <code>/mcp</code> inside Claude Code shows the server and its tools.</p>
