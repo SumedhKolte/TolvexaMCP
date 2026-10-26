@@ -199,7 +199,7 @@ export function ChatPage() {
                 </div>
               ) : (
                 <div key={i} className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-zinc-100 px-4 py-2.5">
+                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-muted px-4 py-2.5">
                     {m.content ? (
                       <Markdown text={m.content} />
                     ) : (
@@ -212,14 +212,14 @@ export function ChatPage() {
               ),
             )}
             {state.error && (
-              <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <p role="alert" className="rounded-md border border-danger-fg/25 bg-danger-bg px-3 py-2 text-sm text-danger-fg">
                 {state.error}
               </p>
             )}
             <div ref={bottomRef} />
           </div>
           {status.data && !status.data.available && (
-            <p role="status" className="mx-3 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p role="status" className="mx-3 mt-3 rounded-md border border-warning-fg/25 bg-warning-bg px-3 py-2 text-sm text-warning-fg">
               {status.data.reason}
             </p>
           )}
@@ -236,7 +236,7 @@ export function ChatPage() {
           <p className="flex items-center gap-1.5 border-t px-4 pt-2 text-xs text-muted-foreground">
             {status.data?.masking === false ? (
               <>
-                <ShieldAlertIcon className="size-3.5 shrink-0 text-amber-600" />
+                <ShieldAlertIcon className="size-3.5 shrink-0 text-warning-fg" />
                 Customer data masking is off: tool results go to the AI provider as they are.
               </>
             ) : (
@@ -320,9 +320,9 @@ function ToolCallList({ toolCalls, streaming }: { toolCalls: ToolCallView[]; str
             <span>{t.durationMs !== undefined ? formatDuration(t.durationMs) : "…"}</span>
           </div>
         </summary>
-        {t.args && <pre className="mt-2 overflow-x-auto rounded bg-zinc-100 p-1.5 whitespace-pre-wrap">{t.args}</pre>}
+        {t.args && <pre className="mt-2 overflow-x-auto rounded bg-muted p-1.5 whitespace-pre-wrap">{t.args}</pre>}
         {t.preview && (
-          <pre className={`mt-1.5 max-h-40 overflow-auto rounded p-1.5 whitespace-pre-wrap ${t.ok ? "bg-zinc-50" : "bg-red-50 text-red-800"}`}>{t.preview}</pre>
+          <pre className={`mt-1.5 max-h-40 overflow-auto rounded p-1.5 whitespace-pre-wrap ${t.ok ? "bg-muted/50" : "bg-danger-bg text-danger-fg"}`}>{t.preview}</pre>
         )}
       </details>
     ))

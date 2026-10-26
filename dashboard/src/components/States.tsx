@@ -26,7 +26,7 @@ export function EmptyState({ title, children, className }: { title: string; chil
 /** Shows the gateway's own error message; never a stack trace. */
 export function ErrorState({ error, className }: { error: unknown; className?: string }) {
   return (
-    <div role="alert" className={cn("flex items-center justify-center gap-2 py-12 text-sm text-red-700", className)}>
+    <div role="alert" className={cn("flex items-center justify-center gap-2 py-12 text-sm text-danger-fg", className)}>
       <AlertTriangleIcon className="size-4" /> {errorMessage(error)}
     </div>
   );
@@ -35,7 +35,7 @@ export function ErrorState({ error, className }: { error: unknown; className?: s
 export function InlineError({ error }: { error: unknown }) {
   if (!error) return null;
   return (
-    <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+    <p role="alert" className="rounded-md border border-danger-fg/25 bg-danger-bg px-3 py-2 text-sm text-danger-fg">
       {errorMessage(error)}
     </p>
   );

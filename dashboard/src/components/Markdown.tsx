@@ -15,7 +15,7 @@ function inline(text: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const t = m[0];
     if (t.startsWith("**")) out.push(<strong key={k++}>{t.slice(2, -2)}</strong>);
-    else if (t.startsWith("`")) out.push(<code key={k++} className="rounded bg-zinc-100 px-1 py-0.5 text-[0.85em]">{t.slice(1, -1)}</code>);
+    else if (t.startsWith("`")) out.push(<code key={k++} className="rounded bg-muted px-1 py-0.5 text-[0.85em]">{t.slice(1, -1)}</code>);
     else out.push(<em key={k++}>{t.slice(1, -1)}</em>);
     last = m.index + t.length;
   }

@@ -13,7 +13,7 @@ const KEY_PLACEHOLDER = "<YOUR_API_KEY>";
 function Snippet({ code }: { code: string }) {
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-md bg-zinc-950 p-4 pr-24 text-xs leading-relaxed text-zinc-100">{code}</pre>
+      <pre className="overflow-x-auto rounded-md border bg-zinc-950 p-4 pr-24 text-xs leading-relaxed text-zinc-100">{code}</pre>
       <div className="absolute top-2 right-2">
         <CopyButton value={code} />
       </div>
@@ -132,7 +132,7 @@ export function ConnectPage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {list.map((t) => (
-                      <code key={t.name} title={t.description} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs">
+                      <code key={t.name} title={t.description} className="rounded bg-muted px-1.5 py-0.5 text-xs">
                         {t.name}
                       </code>
                     ))}

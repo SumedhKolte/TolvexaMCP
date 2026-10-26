@@ -13,6 +13,6 @@ export function RequireAuth({ adminOnly = false }: { adminOnly?: boolean }) {
   if (me.isPending) return <LoadingState label="Loading…" className="h-screen" />;
   if (me.isError) return <ErrorState error={me.error} className="h-screen" />;
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (adminOnly && me.data.role !== "admin") return <Navigate to="/servers" replace />;
+  if (adminOnly && me.data.role !== "admin") return <Navigate to="/overview" replace />;
   return <Outlet />;
 }

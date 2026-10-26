@@ -207,7 +207,7 @@ function ServerTools({ server }: { server: Server }) {
     <ul className="divide-y py-1">
       {tools.data.map((t) => (
         <li key={t.name} className="flex items-start gap-3 py-2">
-          <code className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs">{t.name}</code>
+          <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs">{t.name}</code>
           <span className="text-sm text-muted-foreground">{t.description || "No description."}</span>
           <span className="ml-auto flex shrink-0 gap-1">
             {t.annotations?.readOnlyHint && <Badge variant="secondary">read-only</Badge>}

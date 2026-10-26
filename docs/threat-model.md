@@ -491,5 +491,7 @@ How each rule is checked:
   against.
 - **WordPress, MariaDB and Postgres are single replicas** on ReadWriteOnce volumes. They
   are recreated during upgrades, so expect a short outage then.
-- **mcp-notes stores notes in an emptyDir.** They survive container restarts but not pod
-  deletion. That is acceptable for the demo upstream.
+- **mcp-notes keeps its notes on a 1 Gi PersistentVolumeClaim** (single writer, so it
+  runs one replica and uses the `Recreate` strategy). They survive pod deletion and
+  upgrades, but not the loss of the node; `scripts/backup.sh` doesn't cover this volume
+  yet.

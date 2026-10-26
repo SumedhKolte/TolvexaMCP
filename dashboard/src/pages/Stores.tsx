@@ -147,7 +147,7 @@ export function StoresPage() {
                       <TableCell className="max-w-72 whitespace-normal">
                         <StoreStatusBadge store={s} />
                         {s.status_reason && (
-                          <p className={`mt-1 text-xs ${s.status === "failed" ? "text-red-700" : "text-muted-foreground"}`}>{s.status_reason}</p>
+                          <p className={`mt-1 text-xs ${s.status === "failed" ? "text-danger-fg" : "text-muted-foreground"}`}>{s.status_reason}</p>
                         )}
                       </TableCell>
                       <TableCell>

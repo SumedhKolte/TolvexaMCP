@@ -538,8 +538,8 @@ Each entry: what was decided, why, and the phase it was made in.
   outside the spec's layout and a build-order dependency for three tiny servers. Revisit
   if a fourth server appears.
 - **D4.2 Notes storage.** Notes are kept in memory and mirrored to `/data/notes.json` on an
-  emptyDir, so they survive a container restart but not pod deletion (persistence isn't
-  required). Writes are serialized and atomic (write-then-rename). Storage is capped at
+  emptyDir, so they survive a container restart but not pod deletion. *(Superseded by D8.9:
+  the file now lives on a PersistentVolumeClaim.)* Writes are serialized and atomic (write-then-rename). Storage is capped at
   1000 notes, oldest dropped, so a loop can't exhaust memory.
 - **D4.3 mcp-slow behaviour knobs** (env vars):
   - `ECHO_DELAY_MS`, default 15000, longer than the gateway's 10 s timeout, plus a
@@ -1033,3 +1033,40 @@ Each entry: what was decided, why, and the phase it was made in.
     go to the main store, and the answer names the stores used.
   - **Verified:** an unspecified "create a product" goes to `woocommerce__create_product`.
 
+- **D8.9 Persistent volumes for upstream servers (mcp-notes).**
+  - **Why:** the assignment requires persistent storage, and killing an upstream pod is
+    part of the definition of done. With an emptyDir, killing mcp-notes lost every note.
+  - **How:**
+    - The generic `upstream-mcp` chart takes a per-instance `persistence` block (`enabled`,
+      `size`). It's on for notes (1 Gi) and off for slow.
+    - When enabled, the release gets a PVC `<release>-data` mounted at `/data`, with
+      `helm.sh/resource-policy: keep` so `helm uninstall` can't delete the data.
+    - The storage class comes from `global.storageClass` (`local-path` in production).
+  - **Single writer:** a ReadWriteOnce volume has one writer, so the chart switches to
+    the `Recreate` strategy (a few seconds of downtime on upgrade) and refuses
+    `replicaCount > 1` with persistence at render time.
+  - **Atomic writes:** the notes store writes `notes.json.tmp` and renames it, both on the
+    same volume.
+  - **Verified live:** a note was created, the pod deleted, and `notes__search_notes` on
+    the new pod found it.
+- **D11.1 Dashboard refresh: Overview, brand, dark mode.**
+  - **Overview page:** the new landing page. It shows four headline numbers (servers
+    connected, tools you can use, calls and error rate in the last hour), a stacked
+    outcome bar, per-server health with latency, recent activity, and quick actions. It
+    uses only existing endpoints, and members see their own data because the gateway
+    already scopes it.
+  - **Navigation:** grouped by what people do (Workspace, Platform, Access, Observe)
+    instead of one flat list. The sign-in page is a brand panel plus the form.
+  - **Theme:**
+    - Colours are semantic tokens only (`index.css`). There are no hard-coded palette
+      classes left apart from the always-dark code blocks.
+    - The brand is a deep teal in light mode and a light teal in dark mode. Status colours
+      are bg/fg pairs for success, danger, warning and info, tuned for both themes.
+    - A three-way switch (light, dark, match system) is stored in `localStorage`, with
+      every access guarded.
+    - `public/theme-init.js` sets the class before first paint. It's an external file
+      because the CSP allows no inline scripts, so the CSP is unchanged.
+  - **Verified:** 30 headless-browser checks pass, against both `vite preview` and the
+    real cluster with the CSP enforced. They cover routing, the nav per role, the theme
+    switch and its persistence (including following the OS setting), and no horizontal
+    scroll at 390 px on 8 pages.

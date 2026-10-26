@@ -10,8 +10,9 @@ export interface Note {
 }
 
 /**
- * Notes kept in memory, optionally mirrored to a JSON file (an emptyDir in Kubernetes, so
- * notes survive a container restart but not pod deletion; persistence isn't required).
+ * Notes kept in memory, optionally mirrored to a JSON file. In Kubernetes that file lives
+ * on a PersistentVolumeClaim (charts/upstream-mcp, `persistence`), so notes survive
+ * container restarts, pod deletion and upgrades; without a volume it's an emptyDir.
  * Capped at `maxNotes` (oldest dropped) so a loop can't exhaust memory.
  */
 export class NotesStore {

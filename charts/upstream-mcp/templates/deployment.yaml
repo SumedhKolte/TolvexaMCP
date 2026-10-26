@@ -6,7 +6,15 @@ metadata:
   labels:
     {{- include "upstream.labels" . | nindent 4 }}
 spec:
+  {{- if and $c.persistence.enabled (gt (int $c.replicaCount) 1) }}
+  {{- fail (printf "%s: persistence needs replicaCount 1 (a ReadWriteOnce volume has one writer)" .Release.Name) }}
+  {{- end }}
   replicas: {{ $c.replicaCount }}
+  {{- if $c.persistence.enabled }}
+  # The old pod must release the ReadWriteOnce volume before the new one mounts it.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "upstream.selectorLabels" . | nindent 6 }}
@@ -86,8 +94,15 @@ spec:
           secret:
             secretName: {{ required "secretName is required" $c.secretName }}
             defaultMode: 0440
-        # Scratch space (mcp-notes keeps its JSON file here); lost when the pod is deleted.
+        {{- if $c.persistence.enabled }}
+        # Durable data directory: survives pod deletion, restarts and upgrades.
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-data
+        {{- else }}
+        # Scratch space; lost when the pod is deleted.
         - name: data
           emptyDir: {}
+        {{- end }}
         - name: tmp
           emptyDir: {}

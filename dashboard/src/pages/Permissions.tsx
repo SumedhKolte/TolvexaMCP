@@ -73,7 +73,7 @@ export function PermissionsPage() {
           <div className="space-y-4">
             {[...groups.entries()].map(([server, tools]) => (
               <Card key={server} className="overflow-hidden">
-                <div className="flex items-center gap-2 border-b bg-zinc-50 px-4 py-2.5 text-sm font-medium">
+                <div className="flex items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-sm font-medium">
                   {tools[0]?.server_name ?? server} <code className="text-xs font-normal text-muted-foreground">{server}</code>
                 </div>
                 <Table className="table-fixed">

@@ -199,7 +199,7 @@ export function AuditPage() {
                 </dd>
                 <dt className="text-muted-foreground">Arguments (redacted)</dt>
                 <dd>
-                  <pre className="overflow-x-auto rounded bg-zinc-100 p-2 text-xs whitespace-pre-wrap">{selected.argsSummary ?? "(none)"}</pre>
+                  <pre className="overflow-x-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">{selected.argsSummary ?? "(none)"}</pre>
                 </dd>
                 <dt className="text-muted-foreground">Error message</dt>
                 <dd className="break-words">{selected.errorMessage ?? "—"}</dd>
@@ -261,7 +261,7 @@ function LastHourStats({ isAdmin }: { isAdmin: boolean }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {servers.map((s) => {
             const pct = Math.round(s.error_rate * 1000) / 10;
-            const tone = pct >= 20 ? "text-red-700" : pct > 0 ? "text-amber-700" : "text-emerald-700";
+            const tone = pct >= 20 ? "text-danger-fg" : pct > 0 ? "text-warning-fg" : "text-success-fg";
             return (
               <Card key={s.server} className="p-4">
                 <div className="flex items-baseline justify-between gap-2">

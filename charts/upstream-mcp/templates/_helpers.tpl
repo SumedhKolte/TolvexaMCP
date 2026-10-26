@@ -5,7 +5,7 @@
 {{- if not $inst }}{{ fail (printf "upstreams.instances.%s is not defined in the values" $name) }}{{ end -}}
 {{- /* Reject unknown keys: a mis-indented env var must fail loudly, not vanish. */ -}}
 {{- range $k, $_ := $inst }}
-{{- if not (has $k (list "replicaCount" "port" "image" "tag" "imageId" "secretName" "env" "resources")) }}
+{{- if not (has $k (list "replicaCount" "port" "image" "tag" "imageId" "secretName" "env" "resources" "persistence")) }}
 {{- fail (printf "upstreams.instances.%s: unknown key %q (did you mean to put it under env?)" $name $k) }}
 {{- end }}
 {{- end -}}

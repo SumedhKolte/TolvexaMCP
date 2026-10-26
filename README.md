@@ -129,10 +129,11 @@ everything is plain HTTP; production uses TLS.
 
 ### The dashboard
 
-Sign in at <http://hub.localtest.me>. On a phone the sidebar becomes a menu.
+Sign in at <http://hub.localtest.me>. On a phone the sidebar becomes a menu. A switch at the bottom of the sidebar picks light, dark or match-system.
 
 | Page | Who | What |
 |---|---|---|
+| Overview | everyone | landing page: servers up, tools available, calls and error rate in the last hour, recent activity, quick actions |
 | Servers | everyone (edit: admin) | registered MCP servers with live status, tools and last error; add (tested on save), edit, disable, delete, refresh health |
 | Stores | everyone (members: their own) | create a separate WooCommerce store in about a minute; delete it (bonus, below) |
 | Chat | everyone | the AI assistant (below) |

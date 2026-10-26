@@ -1,0 +1,20 @@
+{{- $c := include "upstream.cfg" . | fromYaml -}}
+{{- if $c.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-data
+  labels:
+    {{- include "upstream.labels" . | nindent 4 }}
+  annotations:
+    # `helm uninstall` and a failed upgrade must never delete the data.
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.global.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $c.persistence.size }}
+{{- end }}

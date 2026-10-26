@@ -78,6 +78,9 @@ upstreams:
       image: mcp-notes
       port: 8080
       secretName: mcp-notes-secrets
+      persistence:
+        enabled: true       # notes survive pod deletion, restarts and upgrades
+        size: 1Gi
       env:
         NOTES_FILE: /data/notes.json
     slow:

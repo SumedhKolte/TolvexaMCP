@@ -31,7 +31,7 @@ export function OneTimeSecret({
           <Input readOnly value={secret ?? ""} className="font-mono text-xs" aria-label="Secret value" onFocus={(e) => e.currentTarget.select()} />
           {secret && <CopyButton value={secret} />}
         </div>
-        <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="flex items-start gap-2 rounded-md border border-warning-fg/25 bg-warning-bg px-3 py-2 text-sm text-warning-fg">
           <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
           Copy it now. It won't be shown again; only its prefix is kept.
         </p>
